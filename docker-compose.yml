@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  edgeguard:
+    build: .
+    container_name: edgeguard_governance
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.json:/app/config.json
+    restart: unless-stopped
+
+  mock_backend:
+    image: nginx:alpine
+    container_name: edgeguard_backend
+    ports:
+      - "8081:80"
+    restart: unless-stopped
