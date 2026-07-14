@@ -1,0 +1,14 @@
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Local log files and state
+edgeguard.log
+blocked_ips.txt
+
+# Node / Vite dependencies and builds
+node_modules/
+dist/
+.env.local
+.env.*.local
+.DS_Store

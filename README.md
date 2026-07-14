@@ -30,11 +30,24 @@ EdgeGuard operates as a transparent TCP reverse proxy.
 
 ### Running Locally (Native)
 
-1. Clone the repository.
-2. Ensure you have a backend service running (by default, EdgeGuard expects a service on `127.0.0.1:80`). You can tweak this in `config.json`.
-3. Run the engine:
+1. **Start the Mock Backend (Optional but Recommended)**:
+   By default, EdgeGuard is configured to forward requests to a backend at `127.0.0.1:8081` (configured in `config.json`). You can start a simple mock HTTP server on this port using Python:
+   ```bash
+   python -m http.server 8081 --bind 127.0.0.1
+   ```
+
+2. **Start the EdgeGuard Engine & Dashboard API**:
+   Run the reverse proxy engine, which also automatically starts the dashboard API server on port `3001` (configured in `config.json`):
    ```bash
    python edgeguard.py
+   ```
+
+3. **Start the React Dashboard Frontend**:
+   Navigate to the dashboard directory, install dependencies, and start the development server (runs on `http://localhost:5173/` by default and proxies `/api` requests to the dashboard API on port `3001`):
+   ```bash
+   cd dashboard
+   npm install
+   npm run dev
    ```
 
 ### Running with Docker

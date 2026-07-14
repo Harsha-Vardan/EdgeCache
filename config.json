@@ -1,9 +1,10 @@
 {
   "host": "0.0.0.0",
   "port": 8080,
-  "backend_host": "mock_backend",
-  "backend_port": 80,
+  "backend_host": "127.0.0.1",
+  "backend_port": 8081,
   "request_limit": 10,
   "time_window": 5,
-  "block_duration": 60
+  "block_duration": 60,
+  "api_port": 3001
 }
