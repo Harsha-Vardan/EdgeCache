@@ -12,3 +12,9 @@ dist/
 .env.local
 .env.*.local
 .DS_Store
+EdgeGuard_Project_Report.md
+
+# Test artifacts
+.pytest_cache/
+benchmark_results.json
+tests/__pycache__/

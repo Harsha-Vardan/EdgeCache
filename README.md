@@ -1,5 +1,7 @@
 # EdgeGuard (EdgeCache)
 
+[![EdgeGuard Tests](https://github.com/Harsha-Vardan/EdgeCache/actions/workflows/test.yml/badge.svg)](https://github.com/Harsha-Vardan/EdgeCache/actions/workflows/test.yml)
+
 EdgeGuard is a lightweight, high-performance Traffic Governance Engine and Reverse Proxy built entirely in Python. It is designed to sit in front of your backend services to protect them from abuse, rate-limit excessive requests, and provide real-time metrics, all while maintaining minimal overhead using non-blocking I/O.
 
 ## Features
@@ -10,6 +12,7 @@ EdgeGuard is a lightweight, high-performance Traffic Governance Engine and Rever
 * **Daemon Cleanup**: A background daemon continuously sweeps and unjails IP addresses once their block duration expires.
 * **Persistent State**: Saves jailed IP addresses to disk (`blocked_ips.txt`) during shutdown and reloads them on startup to ensure protection survives restarts.
 * **Real-time Metrics**: Exposes a `/metrics` endpoint (HTTP endpoint built directly into the TCP socket) for monitoring active connections, total requests, and currently blocked IPs.
+* **Real-time Dashboard**: React-based dashboard with live SSE streaming, traffic charts, blocked IP management, security metrics, and log viewer.
 * **Configurable**: Fully customizable via `config.json` (host, ports, limits, windows, block durations).
 * **Structured Logging**: Outputs logs in JSON format for easy ingestion into log aggregators, keeping track of connections, blocks, and system events.
 
@@ -20,6 +23,11 @@ EdgeGuard operates as a transparent TCP reverse proxy.
 2. When a connection is established, the embedded `TrafficGovernor` evaluates the client's IP against the rate limits and jail history.
 3. If allowed, EdgeGuard asynchronously opens a connection to the configured backend (e.g., an Apache web server on port `80`) and forwards the traffic transparently in both directions.
 4. If rate-limited, EdgeGuard intercepts the request, returns an HTTP 429 "Too Many Requests" response directly to the client, and immediately closes the connection without ever touching the backend.
+
+### Known Tradeoffs
+
+* **`select()` ceiling**: The `select()` syscall has a hard limit of ~1024 file descriptors on most platforms. This is a deliberate tradeoff for simplicity — production-grade proxies use `epoll`/`kqueue`. This design is sufficient for moderate traffic and demonstrates the core concepts clearly.
+* **Single backend**: Currently routes to one `backend_host:backend_port`. No round-robin or weighted load balancing.
 
 ## Getting Started
 
@@ -84,14 +92,69 @@ Modify `config.json` to tune the engine to your needs:
 
 ## Testing
 
-A `test_client.py` script is included to simulate traffic and verify the rate-limiting and jailing mechanisms.
+EdgeGuard has a comprehensive automated test suite with **59 tests** across three tiers:
 
-1. Start EdgeGuard.
-2. In a separate terminal, run the test script:
-   ```bash
-   python test_client.py
-   ```
-This script will hammer the server with requests to intentionally trigger the rate limiter and demonstrate the HTTP 429 response and the automatic unjailing process.
+### Running Tests
+
+```bash
+# Install dependencies
+uv pip install --system -r requirements.txt
+
+# Run the full test suite
+python -m pytest tests/ -v
+
+# Run only unit tests (fast, no server needed)
+python -m pytest tests/test_traffic_governor.py -v
+
+# Run API integration tests
+python -m pytest tests/test_dashboard_api.py -v
+
+# Run end-to-end proxy tests
+python -m pytest tests/test_proxy_integration.py -v
+```
+
+### Test Coverage
+
+| Layer | File | Tests | What It Covers |
+|-------|------|-------|----------------|
+| Unit | `test_traffic_governor.py` | 32 | Rate limiting thresholds, jail/TTL expiry, per-IP independence, connection tracking, request recording, metrics exports, config updates, **thread safety**, timeline events, log buffer |
+| Integration | `test_dashboard_api.py` | 22 | All REST API endpoints (metrics, blocked IPs, health, config, charts, analytics, security, timeline, exports, CORS, error handling, request log, log viewer) |
+| E2E | `test_proxy_integration.py` | 5 | Request forwarding through proxy, rate limiting (429), `/metrics` endpoint, 502 on backend failure |
+
+**Thread Safety**: `TrafficGovernor` uses `threading.Lock()` around all public methods. The test suite includes explicit concurrent read/write tests (10 writer threads + 3 reader threads) to verify no race conditions exist between the proxy's `select()` loop and the dashboard API server thread.
+
+### Traffic Simulator
+
+A `test_client.py` script is also included for manual traffic simulation:
+```bash
+python test_client.py
+```
+
+## Benchmark
+
+A stdlib-only load test script is included for measuring proxy overhead:
+
+```bash
+# Quick dev test (5s, 20 workers)
+python benchmark.py --quick
+
+# Full benchmark (30s, 50 workers — use these numbers for reporting)
+python benchmark.py --duration 30 --concurrent 50
+
+# JSON output for CI pipelines
+python benchmark.py --duration 30 --concurrent 50 --json --output benchmark_results.json
+```
+
+### Benchmark Methodology
+
+All benchmark numbers should be reproduced and cited with the following context:
+
+* **Single-machine setup**: Client, proxy, and backend all run on the same host. This means they share CPU, memory, and the loopback network stack — numbers reflect relative proxy overhead, not absolute production throughput.
+* **Default parameters**: 30-second duration, 50 concurrent workers, stdlib `ThreadPoolExecutor` + raw sockets (no `aiohttp` or `asyncio`).
+* **Metrics reported**: Requests/second (RPS), p50/p95/p99 latency in milliseconds, status code distribution, % of requests blocked (429).
+* **Comparison mode**: The script auto-starts a dummy backend and tests direct-to-backend vs through-proxy, computing the overhead delta.
+
+When citing benchmark numbers (e.g., in a resume or interview), always state: the machine spec, duration, concurrency level, and the single-machine caveat. Example: *"Measured X req/s through proxy at p50=Yms on [machine], 30s run, 50 concurrent workers (single-machine benchmark)."*
 
 ## Checking Metrics
 
@@ -106,6 +169,10 @@ edgeguard_active_connections 0
 edgeguard_total_requests 142
 edgeguard_blocked_ips 1
 ```
+
+## CI/CD
+
+Tests run automatically on every push and pull request to `main` via GitHub Actions. See [`.github/workflows/test.yml`](.github/workflows/test.yml).
 
 ## Disclaimer
 
